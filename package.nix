@@ -4,13 +4,11 @@
   fetchFromGitHub,
   pkg-config,
   makeWrapper,
-  # Runtime libraries for eframe/egui (glow + wayland + x11)
   libGL,
   libxkbcommon,
   wayland,
   xorg,
   vulkan-loader,
-  # Runtime tools nicotine shells out to
   wmctrl,
 }:
 
@@ -22,10 +20,7 @@ rustPlatform.buildRustPackage rec {
     owner = "isomerc";
     repo = "nicotine";
     rev = "v${version}";
-    # Replace with the real hash, e.g. by running:
-    #   nix-prefetch-github isomerc nicotine --rev v0.4.3
-    # or by letting `nix build` fail once and copying the "got:" hash.
-    hash = lib.fakeHash;
+    hash = "sha256-OjfXalFh4v1hU9j3rYID+OG8M4TOWeJIRfualMq0tPA=";
   };
 
   # Cargo.lock is committed upstream — reuse it instead of vendoring by hand.
@@ -49,17 +44,10 @@ rustPlatform.buildRustPackage rec {
     xorg.libxcb
   ];
 
-  # Upstream's [[bin]] section names the binary `Nicotine` (capital N) so
-  # Windows users see `Nicotine.exe`. On Linux the install script also drops
-  # a lowercase `nicotine` symlink — replicate that here.
   postInstall = ''
     ln -sf Nicotine $out/bin/nicotine
   '';
 
-  # Wrap so the eframe/glow GUI can find libGL/Wayland/X11 at runtime, and
-  # so wmctrl is on PATH for window cycling on X11 / KDE Plasma (XWayland).
-  # Sway/Hyprland users get swaymsg/hyprctl from their compositor session
-  # PATH, so we don't hard-depend on those.
   postFixup = ''
     for bin in $out/bin/Nicotine; do
       wrapProgram "$bin" \
@@ -80,8 +68,6 @@ rustPlatform.buildRustPackage rec {
     done
   '';
 
-  # The crate has no test suite worth running in a sandbox (it talks to a
-  # window manager). Skip to keep builds reproducible.
   doCheck = false;
 
   meta = {
