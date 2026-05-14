@@ -1,0 +1,107 @@
+{
+  lib,
+  rustPlatform,
+  fetchFromGitHub,
+  pkg-config,
+  makeWrapper,
+  # Runtime libraries for eframe/egui (glow + wayland + x11)
+  libGL,
+  libxkbcommon,
+  wayland,
+  xorg,
+  vulkan-loader,
+  # Runtime tools nicotine shells out to
+  wmctrl,
+}:
+
+rustPlatform.buildRustPackage rec {
+  pname = "nicotine";
+  version = "0.4.3";
+
+  src = fetchFromGitHub {
+    owner = "isomerc";
+    repo = "nicotine";
+    rev = "v${version}";
+    # Replace with the real hash, e.g. by running:
+    #   nix-prefetch-github isomerc nicotine --rev v0.4.3
+    # or by letting `nix build` fail once and copying the "got:" hash.
+    hash = lib.fakeHash;
+  };
+
+  # Cargo.lock is committed upstream — reuse it instead of vendoring by hand.
+  cargoLock = {
+    lockFile = "${src}/Cargo.lock";
+  };
+
+  nativeBuildInputs = [
+    pkg-config
+    makeWrapper
+  ];
+
+  buildInputs = [
+    libGL
+    libxkbcommon
+    wayland
+    xorg.libX11
+    xorg.libXcursor
+    xorg.libXrandr
+    xorg.libXi
+    xorg.libxcb
+  ];
+
+  # Upstream's [[bin]] section names the binary `Nicotine` (capital N) so
+  # Windows users see `Nicotine.exe`. On Linux the install script also drops
+  # a lowercase `nicotine` symlink — replicate that here.
+  postInstall = ''
+    ln -sf Nicotine $out/bin/nicotine
+  '';
+
+  # Wrap so the eframe/glow GUI can find libGL/Wayland/X11 at runtime, and
+  # so wmctrl is on PATH for window cycling on X11 / KDE Plasma (XWayland).
+  # Sway/Hyprland users get swaymsg/hyprctl from their compositor session
+  # PATH, so we don't hard-depend on those.
+  postFixup = ''
+    for bin in $out/bin/Nicotine; do
+      wrapProgram "$bin" \
+        --prefix LD_LIBRARY_PATH : "${
+          lib.makeLibraryPath [
+            libGL
+            libxkbcommon
+            wayland
+            vulkan-loader
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXrandr
+            xorg.libXi
+            xorg.libxcb
+          ]
+        }" \
+        --prefix PATH : "${lib.makeBinPath [ wmctrl ]}"
+    done
+  '';
+
+  # The crate has no test suite worth running in a sandbox (it talks to a
+  # window manager). Skip to keep builds reproducible.
+  doCheck = false;
+
+  meta = {
+    description = "High-performance EVE Online multiboxing tool for Linux (X11 and Wayland)";
+    longDescription = ''
+      Nicotine is a multiboxing and client management tool for EVE Online,
+      inspired by EVE-O Preview. It runs as a daemon and provides instant
+      client cycling via mouse buttons or keyboard, an always-on-top overlay,
+      and auto-stacking of multiple EVE client windows. Supports X11,
+      KDE Plasma (Wayland via XWayland), Sway, and Hyprland.
+
+      Note: requires the running user to be in the `input` group to read
+      mouse/keyboard events via evdev. The binary also pings upstream on
+      launch for version checks and telemetry.
+    '';
+    homepage = "https://github.com/isomerc/nicotine";
+    changelog = "https://github.com/isomerc/nicotine/releases/tag/v${version}";
+    license = lib.licenses.mit;
+    maintainers = [ ];
+    platforms = lib.platforms.linux;
+    mainProgram = "nicotine";
+  };
+}
